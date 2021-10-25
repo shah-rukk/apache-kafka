@@ -1,0 +1,202 @@
+
+#apache kafka installation steps on centos 7
+
+#overview steps.
+	1. start zookeeper
+	2. start kafka broker
+	3. start kafka connect ( if required with specific connector like debezium)
+	4. install/setup connect plugins through API
+	
+
+sudo su -
+yum install java -y
+echo "JAVA_HOME=/usr/lib/jvm/jre-1.8.0-openjdk-1.8.0.302.b08-0.el7_9.x86_64/bin" >> /etc/profile
+
+yum install wget -y
+wget https://dlcdn.apache.org/kafka/2.8.0/kafka_2.13-2.8.0.tgz
+tar -xzf kafka_2.13-2.8.0.tgz
+cd kafka_2.13-2.8.0
+
+bin/zookeeper-server-start.sh config/zookeeper.properties
+bin/zookeeper-server-start.sh -daemon config/zookeeper.properties
+
+netstat -tulnp | grep 2181
+
+bin/kafka-server-start.sh config/server.properties
+bin/kafka-server-start.sh -daemon config/server.properties
+
+netstat -tulnp | grep 9092
+
+bin/connect-distributed.sh config/connect-distributed.properties
+bin/connect-distributed.sh -daemon config/connect-distributed.properties
+kafka_2.13-2.8.0/bin/connect-distributed.sh -daemon kafka_2.13-2.8.0/config/connect-distributed.properties
+
+
+netstat -tulnp | grep 8083
+
+curl -k localhost:8083
+
+#Get worker cluster ID, version, and git source code commit ID:
+curl localhost:8083
+
+
+#List the connector plugins available on a worker:
+curl localhost:8083/connector-plugins
+
+#Kafka Connect setup
+#The connector configuration can be loaded into Kafka Connect via the REST API:
+curl -k -X POST -H "Accept:application/json" -H "Content-Type:application/json" http://localhost:8083/connectors/ -d '{"name":"mysql-connector-demo","config":{"connector.class":"io.debezium.connector.mysql.MySqlConnector","database.hostname":"mysqldb","database.port":"3306","database.user":"debezium","database.password":"p@ssw0rd","database.server.id":"1","database.server.name":"MySQL-Database-Docker","database.history.kafka.bootstrap.servers":"localhost:9092","database.history.kafka.topic":"dbhistory.demo","include.schema.changes":"true","table.whitelist":"employees.current_dept_emp"}}'
+
+#if need to run above again, need to change
+	connector name
+	topic name
+	
+#List active connectors on a worker:
+curl localhost:8083/connectors
+
+#Check connector specific status:
+curl -k http://localhost:8083/connectors/<CONNECTOR_NAME>/status
+curl -k http://localhost:8083/connectors/mysql-connector-demo/status
+
+		>> output should be
+		{"name":"mysql-connector-demo1","connector":{"state":"RUNNING","worker_id":"172.31.16.212:8083"},"tasks":[{"id":0,"state":"RUNNING","worker_id":"172.31.16.212:8083"}],"type":"source"}
+
+#connector and its task should be running state
+
+
+
+vi start.sh
+
+/root/kafka_2.13-2.8.0/bin/zookeeper-server-start.sh -daemon config/zookeeper.properties
+/root/kafka_2.13-2.8.0/bin/kafka-server-start.sh -daemon config/server.properties
+/root/kafka_2.13-2.8.0/bin/connect-distributed.sh -daemon config/connect-distributed.properties
+
+#testing
+
+bin/kafka-topics.sh --list --zookeeper localhost:2181
+./bin/kafka-topics.sh --bootstrap-server=localhost:9092 --list
+
+
+bin/kafka-topics.sh --zookeeper localhost:2181 --describe --topic dbhistory.demo
+
+#We can listen to these messages using the kafka-console-consumer.sh
+bin/kafka-console-consumer.sh -bootstrap-server "localhost:9092" -topic "MySQL-Database-Docker.database_name.user" -from-beginning
+
+
+#test by changing data on one of table.
+ select * from dept_emp limit 10;
+ update dept_emp set from_date='1986-06-28' where emp_no='10001';
+
+
+===========================================================
+Kafka Manager installation steps:
+https://github.com/yahoo/CMAK#starting-the-service
+
+sudo su -
+
+#java 11 installation
+sudo yum install java-11-openjdk-devel -y
+
+#How to Set Default Java Version
+#Run a command that shows all the installed versions
+sudo alternatives --config java ( must to set java 11 as default incase you have multiple java)
+
+yum install git -y
+git clone https://github.com/yahoo/CMAK.git
+
+#The command below will create a zip file which can be used to deploy the application.
+
+./sbt clean dist
+
+	like this
+	[success] All package validations passed
+	[info] Your package is ready in /root/CMAK/target/universal/cmak-3.0.0.5.zip
+	[success] Total time: 93 s (01:33), completed Sep 20, 2021, 4:43:00 AM
+
+
+cd /root/CMAK/target/universal
+yum install -y unzip
+unzip cmak-3.0.0.5.zip
+
+cd /root/CMAK/target/universal/cmak-3.0.0.5
+
+#update zookeeper host
+vi cmak-3.0.0.5/conf/application.conf
+cmak.zkhosts="172.31.10.238:2181"
+
+#to start CMAK webui
+bin/cmak
+OR
+to run it in background
+bin/cmak >> /dev/null &             >> error will shown on console-consumer
+bin/cmak >> /dev/null &
+
+
+# now Kafka Manager Web UI will be up on port 9000
+
+bin/cmak -Dconfig.file=/path/to/application.conf
+bin/cmak -Dconfig.file=/root/CMAK/conf/application.conf -Dhttp.port=8080
+
+bin/cmak -Dkafka-manager.zkhosts="localhost:2181"
+
+
+
+
+
+======================================other content==============================
+To delete a connector, you can run:
+
+curl -X DELETE http://localhost:8083/connectors/<connector-name>
+
+#kafka connector ( if required )
+wget https://cdn.mysql.com//Downloads/Connector-J/mysql-connector-java-8.0.26-1.el7.noarch.rpm
+
+rpm -ivh mysql-connector-java-8.0.26-1.el7.noarch.rpm
+
+
+
+/bin/kafka-topics.sh --create \
+    --zookeeper <hostname>:<port> \
+    --topic <topic-name> \
+    --partitions <number-of-partitions> \
+    --replication-factor <number-of-replicating-servers>
+	
+bin/kafka-topics.sh --create \
+    --zookeeper localhost:2181 \
+    --topic inventory_purchases \
+    --partitions 1 \
+    --replication-factor 1	
+	
+	
+==========
+link for FileStreamSinkConnector test.
+
+https://acloudguru.com/hands-on-labs/exporting-data-to-a-file-with-kafka-connect
+
+
+=========================sink connector configuration==============================
+https://www.gridgain.com/docs/latest/integrations/kafka/kc-ex-persistdb
+
+download below file.
+
+https://www.confluent.io/hub/confluentinc/kafka-connect-jdbc
+https://d1i4a15mxbxib1.cloudfront.net/api/plugins/confluentinc/kafka-connect-jdbc/versions/10.2.3/confluentinc-kafka-connect-jdbc-10.2.3.zip
+
+unzip confluentinc-kafka-connect-jdbc-10.2.3.zip
+vi /root/kafka_2.13-2.8.0/config/connect-distributed.properties
+
+#add jar path to
+plugin.path=/root/kafka_2.13-2.8.0/,/root/confluentinc-kafka-connect-jdbc-10.2.3/lib
+
+#restart kafka connect
+#kafka-connect-mysql-sink.properties
+
+name=kafka-connect-mysql-sink
+tasks.max=2
+connector.class=io.confluent.connect.jdbc.JdbcSinkConnector
+topics=quickstart-SQL_PUBLIC_PERSON,quickstart-SQL_PUBLIC_CITY
+
+connection.url=jdbc:mysql://localhost:3306/gridgain-kafka-mysql
+connection.user=debezium
+connection.password=debezium@12345
+auto.create=true
