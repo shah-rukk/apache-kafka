@@ -1,0 +1,121 @@
+
+================MYSQL installation and Configuration steps===============================
+
+take centos7 instance from aws market place and connect
+
+sudo su
+
+yum update
+
+**Downloda mysql repository
+go to mysql.com > download > yum repository > copy link
+
+https://dev.mysql.com/get/mysql80-community-release-el7-1.noarch.rpm
+
+yum -y install wget
+
+wget http://dev.mysql.com/get/mysql57-community-release-el7-9.noarch.rpm
+
+rpm -ivh mysql57-community-release-el7-9.noarch.rpm
+
+#if shows msg like below then, need to upgrade linux server first.
+No package mysql-server available.
+
+**isntall mysql-server
+
+yum -y install mysql-server
+
+systemctl start mysqld
+
+systemctl status mysqld
+
+**now mysql is running
+
+**getting mysql temporary password for root user
+
+grep 'password' /var/log/mysqld.log
+
+**copy the password and connect to mysql
+
+mysql -uroot -p
+
+***steps to change the password****
+
+vi /etc/my.cnf
+
+validate_password_policy=LOW
+
+systemctl restart mysqld
+
+mysql_secure_installation
+
+**
+set new root password: 	Kafka@12345678
+
+Remove test database and access to it > No
+Reload privilege tables now > y
+
+*************
+CREATE USER 'kafka'@'%' IDENTIFIED BY 'kafka@12345';
+
+GRANT ALL PRIVILEGES ON *.* TO 'kafka'@'%';
+
+
+**to check users
+SELECT User FROM mysql.user;
+
+the bin-log should be enabled in MySql. Here are the steps to enable bin-log in MySQL.
+
+mysqladmin variable -p | grep log_bin
+
+
+Add/ Modify the below properties in /etc/my.cnf.
+[mysqld]
+server-id = 42
+log_bin = mysql-bin
+binlog_format = row
+binlog_row_image = full
+expire_logs_days = 10
+
+Restart MySQL in order for the changes to take place.
+sudo service mysql restart
+
+We can verify the bin-log status via the following command.
+mysqladmin variable -p | grep log_bin
+
+| log_bin | ON
+
+
+
+CREATE USER 'debezium'@'%' IDENTIFIED BY 'debezium@12345';
+
+GRANT ALL PRIVILEGES ON *.* TO 'debezium'@'%';
+
+#sample data for mysql 
+https://github.com/datacharmer/test_db
+
+ git clone https://github.com/datacharmer/test_db.git
+ cd test_db/
+ mysql -uroot -p < employees.sql
+
+use employees;
+show tables;
+select * from titles limit 10;
+
+====================================Debezium Installation Steps======================================================
+
+https://blog.clairvoyantsoft.com/mysql-cdc-with-apache-kafka-and-debezium-3d45c00762e4
+
+wget https://repo1.maven.org/maven2/io/debezium/debezium-connector-mysql/0.9.2.Final/debezium-connector-mysql-0.9.2.Final-plugin.tar.gz
+
+tar -zxvf debezium-connector-mysql-0.9.2.Final-plugin.tar.gz
+
+#Edit $KAFKA_HOME/config/connect-distributed.properties and update the plugin.path property with the location of the Debezium jar. eg:
+
+plugin.path=/root/debezium-connector-mysql
+
+curl -k localhost:8083
+
+#
+
+
